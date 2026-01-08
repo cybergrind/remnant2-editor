@@ -116,3 +116,47 @@ def decompress_save(data: bytes) -> bytes:
 
     log.debug(f'Decompressed {len(output)} bytes from {len(data)} bytes')
     return bytes(output)
+
+
+def calculate_crc32(data: bytes) -> int:
+    """
+    Calculate CRC32 checksum for decompressed save data.
+
+    The CRC32 is calculated on bytes [4:] of the decompressed data,
+    skipping the first 4 bytes which store the CRC itself.
+
+    Args:
+        data: Decompressed save data
+
+    Returns:
+        CRC32 checksum as unsigned 32-bit integer
+    """
+    return zlib.crc32(data[4:]) & 0xFFFFFFFF
+
+
+def verify_crc32(data: bytes) -> bool:
+    """
+    Verify the CRC32 checksum of decompressed save data.
+
+    Args:
+        data: Decompressed save data
+
+    Returns:
+        True if the stored CRC32 matches the calculated CRC32
+    """
+    stored_crc = struct.unpack_from('<I', data, 0)[0]
+    calculated_crc = calculate_crc32(data)
+    return stored_crc == calculated_crc
+
+
+def update_crc32(data: bytearray) -> None:
+    """
+    Update the CRC32 checksum in decompressed save data.
+
+    Modifies the first 4 bytes of data in-place with the new CRC32.
+
+    Args:
+        data: Decompressed save data (mutable bytearray)
+    """
+    crc = calculate_crc32(data)
+    struct.pack_into('<I', data, 0, crc)
