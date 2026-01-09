@@ -139,9 +139,7 @@ def find_prism_data(data: bytes) -> list[PrismData]:
     return prisms
 
 
-def _parse_segments(
-    data: bytes, seg_pos: int, names: list[str], name_to_idx: dict[str, int]
-) -> list[PrismSegment]:
+def _parse_segments(data: bytes, seg_pos: int, names: list[str], name_to_idx: dict[str, int]) -> list[PrismSegment]:
     """
     Parse the CurrentSegments StructProperty.
 

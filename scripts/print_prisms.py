@@ -7,5 +7,6 @@ Usage: uv run python scripts/print_prisms.py
 
 from editor.prisms import main
 
+
 if __name__ == '__main__':
     main()

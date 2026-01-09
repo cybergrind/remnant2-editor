@@ -162,6 +162,19 @@ def update_crc32(data: bytearray) -> None:
     struct.pack_into('<I', data, 0, crc)
 
 
+def update_decompressed_size(data: bytearray) -> None:
+    """
+    Update the DecompressedSize field to match actual data length.
+
+    The DecompressedSize field is at offset 4 (bytes 4-7) and must match
+    the actual length of the decompressed data.
+
+    Args:
+        data: Decompressed save data (mutable bytearray)
+    """
+    struct.pack_into('<i', data, 4, len(data))
+
+
 def write_chunk_header(
     output: bytearray,
     offset: int,
