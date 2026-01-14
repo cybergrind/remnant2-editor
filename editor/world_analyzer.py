@@ -210,34 +210,44 @@ def _translate_location(location: str) -> str:
 
 
 def _extract_events_text(save_text: str, mode: ProcessMode) -> str:
-    """Extract the relevant portion of save text for a mode."""
-    campaign_start_marker = '/Game/World_Base/Quests/Quest_Ward13/Quest_Ward13.Quest_Ward13_C'
-    campaign_end_marker = '/Game/Campaign_Main/Quest_Campaign_Main.Quest_Campaign_Main_C'
+    """Extract the relevant portion of save text for a mode.
 
-    campaign_end = save_text.find(campaign_end_marker)
+    Uses Quest_Global markers to find event blobs, similar to C# implementation.
+    The larger blob is campaign, the smaller is adventure.
+    """
+    # Find Quest_Global start and end markers
+    global_start_pattern = r'/Game/World_Base/Quests/Quest_Global/Quest_Global\.Quest_Global_C'
+    global_end_pattern = r'/Game/World_Base/Quests/Quest_Global/Quest_Global.{5}Quest_Global_C'
 
-    if mode == ProcessMode.CAMPAIGN:
-        campaign_start = save_text.find(campaign_start_marker)
-        if campaign_start == -1 or campaign_end == -1:
-            return ''
-        # Find the last occurrence of campaign start before campaign end
-        events_text = save_text[:campaign_end]
-        last_start = events_text.rfind(campaign_start_marker)
-        if last_start != -1:
-            return events_text[last_start:]
+    starts = list(re.finditer(global_start_pattern, save_text))
+    ends = list(re.finditer(global_end_pattern, save_text))
+
+    if len(starts) == 0 or len(starts) != len(ends):
         return ''
 
-    # Adventure mode
-    adventure_pattern = r'/Game/World_(?:\w+)/Quests/Quest_AdventureMode/Quest_AdventureMode_\w+\.Quest_AdventureMode_\w+_C'
-    match = re.search(adventure_pattern, save_text)
-    if match:
-        adventure_end = match.start()
-        adventure_start = campaign_end if campaign_end != -1 else 0
-        if adventure_start > adventure_end:
-            adventure_start = 0
-        return save_text[adventure_start:adventure_end]
+    # Calculate blob lengths to determine which is campaign vs adventure
+    blobs: list[tuple[int, int, int]] = []  # (start, end, length)
+    for i in range(len(starts)):
+        start_pos = starts[i].start()
+        end_pos = ends[i].start()
+        length = end_pos - start_pos
+        blobs.append((start_pos, end_pos, length))
 
-    return ''
+    if len(blobs) == 1:
+        # Only campaign exists
+        if mode == ProcessMode.CAMPAIGN:
+            return save_text[blobs[0][0] : blobs[0][1]]
+        return ''
+
+    # Sort by length - larger is campaign, smaller is adventure
+    sorted_blobs = sorted(blobs, key=lambda x: x[2], reverse=True)
+
+    if mode == ProcessMode.CAMPAIGN:
+        blob = sorted_blobs[0]  # Larger blob
+    else:
+        blob = sorted_blobs[1]  # Smaller blob
+
+    return save_text[blob[0] : blob[1]]
 
 
 def _parse_events(events_text: str, mode: ProcessMode) -> list[WorldEvent]:
@@ -249,10 +259,13 @@ def _parse_events(events_text: str, mode: ProcessMode) -> list[WorldEvent]:
     seen_events: set[str] = set()
 
     # Event types to skip
-    skip_event_types = {'Global', 'Earth', 'AdventureMode'}
+    skip_event_types = {'Global', 'Earth', 'AdventureMode', 'RootEarth'}
 
     # Event names to skip
-    skip_event_names = {'AdventureMode', 'Campaign_Main'}
+    skip_event_names = {'AdventureMode', 'Campaign_Main', 'Zone1', 'Zone2'}
+
+    # Worlds to skip
+    skip_worlds = {'Campaign_Main'}
 
     # Match quest events
     pattern = r'/Game/(?P<world>(?:World|Campaign)_\w+)/Quests/(?:Quest_)?(?P<eventType>[a-zA-Z0-9]+)_(?P<eventName>\w+)/(?P<details>\w+)\.\w+'
@@ -271,6 +284,8 @@ def _parse_events(events_text: str, mode: ProcessMode) -> list[WorldEvent]:
         if event_type in skip_event_types:
             continue
         if event_name in skip_event_names:
+            continue
+        if world in skip_worlds:
             continue
         if 'Template' in match.group(0) or 'TileInfo' in match.group(0):
             continue
